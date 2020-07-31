@@ -1,13 +1,49 @@
-deploy:
-    image: offlinegmbh/oc-bootstrapper:latest
-    only:
-        - master
-    script:
-        - eval $(ssh-agent -s)
-        - echo "$SSH_PRIVATE_KEY" > /tmp/id_rsa && chmod 400 /tmp/id_rsa && ssh-add /tmp/id_rsa && mkdir -p ~/.ssh
-        - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
-        - |
-            envoy run deploy \
-                --author="$GITLAB_USER_LOGIN" \
-                --branch="$CI_COMMIT_REF_NAME" \
-                --commit="$CI_COMMIT_MESSAGE"
+image: hackolein/php-envoy:latest
+
+services:
+ - mysql:5.7
+
+variables:
+ MYSQL_DATABASE: homestead
+ MYSQL_ROOT_PASSWORD: secret
+ DB_HOST: mysql
+ DB_USERNAME: root
+
+stages:
+ - deploy
+
+deploy_develop:
+ stage: deploy
+ tags:
+   - php
+ script:
+  - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+  - eval $(ssh-agent -s)
+  - ssh-add <(echo "$SSH_PRIVATE_KEY_STAGING")
+  - mkdir -p ~/.ssh
+  - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+
+  - ~/.composer/vendor/bin/envoy run deploy-staging --commit="$CI_COMMIT_SHA"
+ environment:
+  name: develop
+ only:
+  - develop
+
+
+deploy_master:
+ stage: deploy
+ tags:
+  - php
+ script:
+  - 'which ssh-agent || ( apt-get update -y && apt-get install openssh-client -y )'
+  - eval $(ssh-agent -s)
+  - ssh-add <(echo "$SSH_PRIVATE_KEY_LIVE")
+  - mkdir -p ~/.ssh
+  - '[[ -f /.dockerenv ]] && echo -e "Host *\n\tStrictHostKeyChecking no\n\n" > ~/.ssh/config'
+
+  - ~/.composer/vendor/bin/envoy run deploy-master --stage=master --commit="$CI_COMMIT_SHA"
+ environment:
+  name: master
+ when: manual
+ only:
+  - master

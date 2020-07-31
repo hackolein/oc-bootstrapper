@@ -1,7 +1,7 @@
 @setup
     $repository = '%deployment.repository%';
     $branch = $stage === 'master' ? 'master' : 'develop';
-    $web_dir = $stage === 'master' ?  '%deployment.webDirLive%' : ''%deployment.webDirLive%'';
+    $web_dir = $stage === 'master' ?  '%deployment.webDirLive%' : ''%deployment.webDirStage%'';
     $releases_dir = 'releases';
     $release = date('YmdHis');
     $new_relative_release_dir = $releases_dir .'/'. $release;

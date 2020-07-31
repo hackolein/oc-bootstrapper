@@ -1,67 +1,81 @@
 @setup
-    // Deployment configuration ----------
-    $project      = '%app.hostname%';
-    $user         = '%deployment.user%';
-    $server       = '%deployment.server%';
-    $directory    = 'public_html/%app.hostname%/';
-    $slackWebhook = 'https://hooks.slack.com/services/your/slack/webhook/url';
-    // -----------------------------------
-
-    $author = isset($author) ? $author : "someone";
-    $branch = isset($branch) ? $branch : "unknown branch";
-    $commit = isset($commit) ? $commit : "no message";
+    $repository = '%deployment.repository%';
+    $branch = $stage === 'master' ? 'master' : 'develop';
+    $web_dir = $stage === 'master' ?  '%deployment.webDirLive%' : ''%deployment.webDirLive%'';
+    $releases_dir = 'releases';
+    $release = date('YmdHis');
+    $new_relative_release_dir = $releases_dir .'/'. $release;
+    $new_absolute_release_dir = $web_dir . '/' . $new_relative_release_dir;
+    $shared_dir = 'shared'
 @endsetup
 
-@servers(['web' => $user . '@' . $server, 'localhost' => '127.0.0.1'])
+@servers(['staging-server' => '%deployment.server_staging%', 'master-server' => '%deployment.server_master%'])
 
-@story('deploy')
-    update
+@story('deploy-master', [ 'on' => 'master-server' ])
+    clone_repository
+    update_symlinks
+    theme_sync
+    migrate
+    cache
+    clean_up
 @endstory
 
-@task('update', ['on' => 'web'])
-    cd {{ $directory }}
-    git pull
+@story('deploy-staging', [ 'on' => 'staging-server' ])
+    clone_repository
+    update_symlinks
+    theme_sync
+    migrate
+    cache
+    clean_up
+@endstory
 
-    [ ! -f "composer.phar" ] && wget https://getcomposer.org/composer.phar
-    php composer.phar install --no-interaction --no-dev --prefer-dist --ignore-platform-reqs
-    php ./vendor/bin/october install
-    php artisan -v october:up
-
-    ## START UPDATE CHECK
-    LOCK_FILE=".last-update-check"
-    NOW=$(date +%s)
-    LAST_CHECK=$( [ -f $LOCK_FILE ] && cat $LOCK_FILE || echo 0 )
-    SECONDS_SINCE=$(expr $NOW - $LAST_CHECK)
-
-    if [ "$SECONDS_SINCE" -gt "86400" ]; then
-        HOSTNAME=$( hostname )
-        GIT=$( which git )
-
-        php composer.phar self-update
-        php ./vendor/bin/october update
-
-        if [[ -n $(git status -s) ]]; then
-            $GIT add --all .
-            $GIT commit -m "[ci skip] oc-bootstrapper updated October CMS ({{ $project }})"
-            $GIT push origin master
-        fi
-
-        echo $NOW > $LOCK_FILE
-    else
-        echo "Skipping update check (last check was $SECONDS_SINCE seconds ago)"
-    fi
-    ## END UPDATE CHECK
-
-    git status -s
+@task('clone_repository')
+    echo 'Cloning repository'
+    [ -d {{ $web_dir }}/{{ $releases_dir }} ] || mkdir {{ $web_dir }}/{{ $releases_dir }}
+    git clone --single-branch --branch {{ $branch }} --depth 1 {{ $repository }} {{ $new_absolute_release_dir }}
+    cd {{ $new_absolute_release_dir }}
+    git reset --hard {{ $commit }}
 @endtask
 
-@finished
-    $message = sprintf(
-        "`%s` deployed `%s` via `%s`:\n\n> %s",
-        ucfirst($author),
-        $project,
-        $branch,
-        $commit
-    );
-    @slack($slackWebhook, 'deployments', $message)
-@endfinished
+@task('run_composer')
+    echo "Starting deployment ({{ $release }})"
+    cd {{ $new_absolute_release_dir }}
+    composer install --prefer-dist --no-scripts -q -o
+@endtask
+
+@task('theme_sync')
+    echo "Start syncing ({{ $release }})"
+    php {{ $new_absolute_release_dir }}/artisan theme:sync --target=database --force # --paths=layouts/,pages/,partials/
+@endtask
+
+@task('cache')
+    php {{ $new_absolute_release_dir }}/artisan cache:clear --quiet
+@endtask
+
+@task('migrate')
+    php {{ $new_absolute_release_dir }}/artisan october:up
+@endtask
+
+@task('update_symlinks')
+    rm -rf {{ $new_absolute_release_dir }}/.git
+    echo "Linking storage directory"
+    rm -rf {{ $new_absolute_release_dir }}/storage
+    ln -nfs ../../{{ $shared_dir }}/storage {{ $new_absolute_release_dir }}/storage
+
+    echo 'Linking .env file'
+    ln -nfs ../../{{ $shared_dir }}/.env {{ $new_absolute_release_dir }}/.env
+
+    echo 'Linking robots.txt file'
+    ln -nfs ../../{{ $shared_dir }}/robots.txt {{ $new_absolute_release_dir }}/robots.txt
+
+    echo 'Linking current release'
+    ln -nfs {{ $new_relative_release_dir }} {{ $web_dir }}/current
+
+    sudo /usr/sbin/apachectl -k graceful
+@endtask
+
+@task('clean_up')
+    echo 'Delete all folders except last three'
+    cd {{ $web_dir  }}/{{ $releases_dir }}
+    ls -1 | sort -r | tail -n +4 | xargs rm -rf
+@endtask

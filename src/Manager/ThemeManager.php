@@ -21,12 +21,16 @@ class ThemeManager extends BaseManager
      */
     public function parseDeclaration(string $themeDeclaration): array
     {
-        preg_match("/([^ ]+)(?: ?\(([^\)]+))?/", $themeDeclaration, $matches);
+        preg_match("/([^ ]+)(?: ?\(([^\)]+)\)).*<(.*)>/", $themeDeclaration, $matches);
 
         array_shift($matches);
 
         if (count($matches) < 2) {
             $matches[1] = false;
+        }
+
+        if (count($matches) < 3) {
+          $matches[2] = '';
         }
 
         return $matches;
@@ -52,7 +56,7 @@ class ThemeManager extends BaseManager
 
     public function getDirPath(string $themeDeclaration)
     {
-        list($theme, $remote) = $this->parseDeclaration($themeDeclaration);
+        list($theme, $remote, $customTheme) = $this->parseDeclaration($themeDeclaration);
 
         $theme = strtolower($theme);
 
@@ -107,10 +111,10 @@ class ThemeManager extends BaseManager
      */
     public function installViaArtisan(string $themeDeclaration)
     {
-        list($theme, $remote) = $this->parseDeclaration($themeDeclaration);
+        list($theme, $remote, $customTheme) = $this->parseDeclaration($themeDeclaration);
 
         try {
-            $this->artisan->call("theme:install {$theme}");
+            $this->artisan->call("theme:install {$theme} {$customTheme}");
         } catch (RuntimeException $e) {
             throw new RuntimeException(sprintf('Error while installing theme "%s" via artisan.', $theme));
         }

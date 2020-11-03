@@ -1,7 +1,7 @@
 @setup
     $repository = '%deployment.repository%';
     $branch = $stage === 'master' ? 'master' : 'develop';
-    $web_dir = $stage === 'master' ?  '%deployment.webDirLive%' : ''%deployment.webDirLive%'';
+    $web_dir = $stage === 'master' ?  '%deployment.webDirLive%' : '%deployment.webDirStage%';
     $releases_dir = 'releases';
     $release = date('YmdHis');
     $new_relative_release_dir = $releases_dir .'/'. $release;
@@ -9,7 +9,7 @@
     $shared_dir = 'shared'
 @endsetup
 
-@servers(['staging-server' => '%deployment.server_staging%', 'master-server' => '%deployment.server_master%'])
+@servers(['staging-server' => '%deployment.serverStaging%', 'master-server' => '%deployment.serverMaster%'])
 
 @story('deploy-master', [ 'on' => 'master-server' ])
     clone_repository
@@ -45,7 +45,7 @@
 
 @task('theme_sync')
     echo "Start syncing ({{ $release }})"
-    php {{ $new_absolute_release_dir }}/artisan theme:sync --target=database --force # --paths=layouts/,pages/,partials/
+    php {{ $new_absolute_release_dir }}/artisan theme:sync --target=database --force --paths=layouts/,pages/,partials/
 @endtask
 
 @task('cache')

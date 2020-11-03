@@ -35,7 +35,7 @@ trait ManageDirectory
      */
     public function replaceVars($file, array $config)
     {
-        $contents = preg_replace_callback('/\%([0-9a-z.]+)\%/', function ($matches) use ($config) {
+        $contents = preg_replace_callback('/\%([0-9a-zA-Z.]+)\%/', function ($matches) use ($config) {
             $parseHostname = false;
             // app.hostname is a special config entry that returns only the host part of the app.url.
             if ($matches[1] === 'app.hostname') {

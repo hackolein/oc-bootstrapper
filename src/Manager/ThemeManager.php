@@ -21,16 +21,16 @@ class ThemeManager extends BaseManager
      */
     public function parseDeclaration(string $themeDeclaration): array
     {
-        preg_match("/([^ ]+)(?: ?\(([^\)]+)\)).*<(.*)>/", $themeDeclaration, $matches);
+        preg_match("/([^ ]+)(?: ?\(([^\)]*)\))(?: ?\[([^\]]*)\])/", $themeDeclaration, $matches);
 
         array_shift($matches);
 
-        if (count($matches) < 2) {
+        if (!$matches[1]) {
             $matches[1] = false;
         }
 
-        if (count($matches) < 3) {
-          $matches[2] = '';
+        if (!$matches[2]) {
+          $matches[2] = false;
         }
 
         return $matches;
@@ -77,7 +77,7 @@ class ThemeManager extends BaseManager
      */
     public function install(string $themeDeclaration)
     {
-        list($theme, $remote) = $this->parseDeclaration($themeDeclaration);
+        list($theme, $remote, $customTheme) = $this->parseDeclaration($themeDeclaration);
 
         $themeDir = $this->createDir($themeDeclaration);
 
@@ -86,7 +86,7 @@ class ThemeManager extends BaseManager
         }
 
         if ($remote === false) {
-            return $this->installViaArtisan($theme);
+            return $this->installViaArtisan($theme, $customTheme);
         }
 
         $repo = Git::repo($themeDir);
@@ -105,14 +105,13 @@ class ThemeManager extends BaseManager
      * Installs a theme via artisan command.
      *
      * @param string theme declaration string
+     * @param string custom theme name
      *
      * @return string
      * @throws RuntimeException
      */
-    public function installViaArtisan(string $themeDeclaration)
+    public function installViaArtisan(string $theme, string $customTheme = '' )
     {
-        list($theme, $remote, $customTheme) = $this->parseDeclaration($themeDeclaration);
-
         try {
             $this->artisan->call("theme:install {$theme} {$customTheme}");
         } catch (RuntimeException $e) {
